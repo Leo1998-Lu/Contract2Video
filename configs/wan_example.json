@@ -1,0 +1,33 @@
+{
+  "renderer": {
+    "type": "wan",
+    "model": "<local-model-identifier>",
+    "device": "cuda",
+    "dtype": "bf16",
+    "estimated_cost": 0.0,
+    "guidance_scale": 5.0,
+    "num_frames": 49,
+    "fps": 16
+  },
+  "observer": {
+    "type": "vlm",
+    "model": "<local-observer-identifier>",
+    "audio": true,
+    "ocr": true
+  },
+  "planner": {
+    "type": "chat",
+    "mode": "external_provider",
+    "model": "<provider-model-identifier>",
+    "temperature": 0.0
+  },
+  "policy": {
+    "strategy": "local",
+    "max_rounds": 3,
+    "max_render_calls": 12,
+    "max_cost": 0.0,
+    "support_threshold": 0.8,
+    "contradict_threshold": 0.8,
+    "calibration_file": null
+  }
+}

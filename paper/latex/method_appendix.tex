@@ -1,0 +1,192 @@
+\section{Formal Properties and Scope of Guarantees}
+\label{app:formal}
+
+This appendix states properties of the controller rather than guarantees of
+visual correctness. The properties rely on explicit conditions. In
+particular, a language or vision-language model may return a well-formed,
+high-confidence, but incorrect judgment.
+
+\subsection{Dependency Closure}
+
+Let $D=(Q,F)$ be the validated directed acyclic shot graph. For a root set
+$R\subseteq Q$, define $A=R\cup\operatorname{Desc}_D(R)$. A set is
+\emph{successor-closed} if it contains every direct successor of every member.
+
+\paragraph{Proposition 1 (minimal successor closure).}
+$A$ is the unique smallest successor-closed superset of $R$.
+
+\paragraph{Proof.}
+Every successor of a node reachable from $R$ is itself reachable from $R$,
+so $A$ is successor-closed. Consider any successor-closed set $S$ containing
+$R$. Induction on path length shows that $S$ contains every node reachable
+from $R$: the base case is a root, and each inductive step follows a direct
+successor. Thus $A\subseteq S$, proving minimality. Two smallest such sets
+must contain one another, proving uniqueness.\hfill$\square$
+
+This proposition establishes minimality only among sets satisfying the
+chosen successor-closure rule. It does not establish the smallest repair
+capable of fixing a video. The graph may overapproximate dependencies, a
+constraint may have been decomposed too broadly, and a changed predecessor
+may leave a descendant semantically unaffected. Conversely, an omitted
+dependency can prevent the closure from including a genuinely affected shot.
+Both overrepair and underrepair are measured in the graph ablation.
+
+\paragraph{Proposition 2 (unchanged-asset preservation).}
+Suppose each renderer writes only to its assigned versioned output path,
+existing assets are immutable, and the controller replaces assets only for
+shots in $A$. Then the asset bytes and content hash for every shot outside
+$A$ remain unchanged after the repair wave.
+
+\paragraph{Proof.}
+No render is scheduled for a shot outside $A$, and the stated write
+restriction prevents scheduled renders from changing another shot's stored
+asset. Hence each such file retains its bytes. A deterministic hash applied
+to identical bytes returns the same hash.\hfill$\square$
+
+Byte preservation does not imply that all relations involving an unchanged
+shot remain true: a relation may compare it with a changed shot. This is
+why the controller reassesses all constraints after each wave instead of
+reusing only judgments about unchanged local assets. Hash matching provides
+version binding under the usual practical assumption that collisions do not
+occur. It is not evidence that a semantic interpretation is accurate.
+
+\subsection{Call-Budget Termination}
+
+\paragraph{Proposition 3 (bounded number of render attempts).}
+For a finite nonnegative integer budget $B_N$, if the call counter is
+incremented before every attempted render and no call starts when the counter
+equals $B_N$, the total number of render attempts is at most $B_N$.
+
+\paragraph{Proof.}
+The counter starts at zero. Every attempted render increases it by one,
+including attempts that subsequently fail. The pre-call guard allows a new
+attempt only while the current count is smaller than $B_N$. Induction over
+attempts therefore bounds the count by $B_N$.\hfill$\square$
+
+If each external call returns or times out and the maximum number of
+verification/repair rounds is finite, the complete controller also
+terminates. A finite call count alone is not a wall-clock termination
+guarantee for an external service without a timeout. Experiments must report
+the timeout policy and count all chargeable failed requests.
+
+For monetary budgets, assume each render's billed cost $c_t$ obeys
+$0\leq c_t\leq\bar c_t$, where $\bar c_t$ is its pre-call estimate.
+If the controller reserves $\bar c_t$ and dispatches only when cumulative
+reservations plus $\bar c_t$ do not exceed $B_C$, then total billed render
+cost is at most $B_C$. The result follows by summing
+$c_t\leq\bar c_t$. This statement excludes unreserved planning, observation,
+storage, and egress charges. The full cost ledger in the resource appendix
+accounts for those separately.
+
+\subsection{Fixed-Threshold Certification}
+
+For a fixed stratum $g$, let $Z_1,\ldots,Z_{n_g}$ be independent Bernoulli
+variables indicating whether an incorrect directional verdict receives a
+score at least $\tau_g$. The threshold is chosen without using the
+certification examples, and the examples follow the fixed target sampling
+distribution. Write $p_g=\mathbb E[Z_i]$ and
+$\widehat p_g=n_g^{-1}\sum_i Z_i$. Hoeffding's inequality gives
+\begin{equation}
+ \Pr\left(p_g>\widehat p_g+t\right)\leq\exp(-2n_gt^2).
+\end{equation}
+Setting $t=\sqrt{\log(K/\alpha)/(2n_g)}$ gives a failure probability at most
+$\alpha/K$. A union bound over the $K$ predeclared strata yields
+\begin{equation}
+ \Pr\left(\forall g:\ p_g\leq U_g\right)\geq1-\alpha.
+\end{equation}
+The strata need not be mutually independent for this union bound, but the
+within-stratum sampling assumptions remain necessary.
+
+At zero accepted negatives, obtaining $U_g\leq\epsilon$ requires
+\begin{equation}
+ n_g\geq\left\lceil\frac{\log(K/\alpha)}{2\epsilon^2}\right\rceil.
+ \label{eq:calibration-sample-size}
+\end{equation}
+For $K=2$, $\alpha=0.05$, and $\epsilon=0.05$, this is at least $738$
+independent negative examples per direction. These are incorrect candidate
+verdicts, not simply $738$ arbitrary clips. Collecting them may require
+substantially more observations. This is a planning calculation, not a
+measured result. If the available negative sample is smaller, the paper will
+report the observed rate and its bound without claiming certification at
+the desired level.
+
+The implemented routine enforces disjoint case identifiers between
+selection and certification. Case disjointness alone does not remove
+dependence between multiple rows from the same certification case. The
+experimental design therefore preselects one observation per case and
+direction using a fixed rule before inspecting its correctness label.
+Repeated observations are retained for a separate case-clustered analysis.
+Threshold candidates may also fail to include a feasible accepting policy.
+In that case the strict deployment choice is complete abstention, not
+post-hoc relaxation of the risk target.
+
+\subsection{What Certification Does Not Imply}
+
+The negative acceptance rate is distinct from false discovery. Let $Y=1$
+mean a directional verdict is correct and $A$ mean it passes threshold.
+Then
+\begin{equation}
+ \Pr(Y=0\mid A)
+ =\frac{\Pr(A\mid Y=0)\Pr(Y=0)}{\Pr(A)}.
+\end{equation}
+Controlling the first factor does not control the full ratio without
+additional information about prevalence and acceptance probability. Even
+an accurate per-verdict procedure can misjudge a multi-constraint video.
+Moreover, prompts selected after earlier failures can shift the distribution
+of observer mistakes. The fixed-split result cannot be reused as an
+adaptive-repair guarantee. We therefore report error and abstention rates
+separately for initial and repaired outputs, together with round-conditioned
+audits and independent human judgments.
+
+The system intentionally distinguishes missing evidence from evidence of
+absence. For example, an object outside the camera's field of view may be
+unobservable rather than absent from the intended scene. Whether visibility
+itself is required depends on the contract. An identity comparison involving
+an occluded face may remain unknown even when a generic object-presence
+constraint is supported. Repairing unknown constraints by improving framing
+is an experimentally testable policy, not proof that the original clip
+violated the narrative.
+
+\section{Mapping the Architecture to the Implementation}
+\label{app:implementation-boundary}
+
+The supplied architecture is interpreted with four corrections. First, hard
+constraint satisfaction is a function of rendered video and contract,
+$H(V;\mathcal C)$, rather than $H(\mathcal C)$. Second, local repair denotes
+a dependency-closure heuristic. The current algorithm does not compute an
+exact minimum-cost feasible edit. Third, insufficient evidence produces
+abstention rather than a positive contradiction. Fourth, symbolic plan
+approval and visual output acceptance are different decisions. The final
+figure should preserve these distinctions in its labels and arrows.
+
+\paragraph{Available components.}
+The schema validator, dependency closure, evidence record checks,
+contradiction-first aggregation, split-based threshold utility, bounded
+controller, versioned artifact storage, and evaluation-export interfaces
+are present in the accompanying research repository. A deterministic
+renderer and scripted observer exercise interfaces and controller paths.
+They are excluded from all semantic video-quality tables. A generic command
+adapter passes the shot prompt, seed, feedback, and references to an external
+rendering program.
+
+\paragraph{Integration tasks.}
+The current visual-language observer is an explicit provider integration
+point and does not perform real perception by itself. The remote compiler
+accepts JSON from a chat endpoint, but full specialist orchestration and its
+structured prompts require an experiment-specific implementation. The direct
+Wan adapter currently calls a prompt-conditioned diffusion pipeline without
+consuming repair feedback or reference clips. Consequently, a direct run of
+that adapter cannot establish the contribution of counterexample-conditioned
+editing or reference-conditioned continuity. These capabilities must be
+implemented through validated adapters, frozen before evaluation, and
+distinguished from seed-only resampling in the experiment logs.
+
+\paragraph{Eight-GPU execution.}
+The controller represents one logical request. Parallel execution across
+eight A100 GPUs is an orchestration layer outside the single-request core.
+It must assign independent cases to workers, preserve dependency order
+within a case, avoid output-path collisions, and record worker and model
+identifiers. Changing worker concurrency must not alter seed schedules,
+contracts, or the budget assigned to any experimental condition. Exact
+throughput and peak memory are measured rather than inferred from the number
+of GPUs.

@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "contract_id": "contract2video-two-shot-demo",
+  "prompt": "A red paper boat drifts along a calm stream at dawn, then passes beneath a small stone bridge while the camera follows from behind.",
+  "entities": [
+    {"id": "boat", "description": "one red paper boat"},
+    {"id": "stream", "description": "a calm stream at dawn"},
+    {"id": "bridge", "description": "one small stone bridge"}
+  ],
+  "shots": [
+    {
+      "id": "shot_01",
+      "prompt": "Wide establishing shot of one red paper boat drifting on a calm stream at dawn.",
+      "duration": 3.0,
+      "dependencies": [],
+      "entity_ids": ["boat", "stream"],
+      "state_in": {"boat_location": "upstream", "boat_under_bridge": false},
+      "state_out": {"boat_location": "midstream", "boat_under_bridge": false},
+      "scene": {"time_of_day": "dawn", "camera": "wide_locked"}
+    },
+    {
+      "id": "shot_02",
+      "prompt": "Tracking shot from behind as the same red paper boat passes beneath a small stone bridge.",
+      "duration": 3.0,
+      "dependencies": ["shot_01"],
+      "entity_ids": ["boat", "stream", "bridge"],
+      "state_in": {"boat_location": "midstream", "boat_under_bridge": false},
+      "state_out": {"boat_location": "downstream", "boat_under_bridge": true},
+      "scene": {"time_of_day": "dawn", "camera": "tracking_behind"}
+    }
+  ],
+  "constraints": [
+    {
+      "id": "c_boat_red",
+      "kind": "attribute",
+      "description": "The boat is red in every shot where it appears.",
+      "shot_ids": ["shot_01", "shot_02"],
+      "hardness": "hard",
+      "weight": 1.0
+    },
+    {
+      "id": "c_boat_identity",
+      "kind": "identity",
+      "description": "The same boat persists from shot_01 to shot_02.",
+      "shot_ids": ["shot_01", "shot_02"],
+      "hardness": "hard",
+      "weight": 1.0
+    },
+    {
+      "id": "c_bridge_transition",
+      "kind": "temporal",
+      "description": "The boat passes beneath the bridge only after the first shot.",
+      "shot_ids": ["shot_01", "shot_02"],
+      "hardness": "hard",
+      "weight": 1.0
+    },
+    {
+      "id": "c_camera_follow",
+      "kind": "spatial",
+      "description": "Shot_02 follows the boat from behind.",
+      "shot_ids": ["shot_02"],
+      "hardness": "soft",
+      "weight": 0.5
+    }
+  ],
+  "metadata": {
+    "split": "fixture",
+    "language": "en",
+    "notes": "Illustrative contract only; no perceptual result is implied."
+  }
+}

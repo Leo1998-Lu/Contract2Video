@@ -1,0 +1,30 @@
+{
+  "renderer": {
+    "type": "procedural",
+    "width": 512,
+    "height": 288,
+    "fps": 8,
+    "format": "mp4",
+    "estimated_cost": 0.0
+  },
+  "observer": {
+    "type": "scripted",
+    "mode": "fixture_only",
+    "evidence": [],
+    "estimated_cost": 0.0
+  },
+  "planner": {
+    "type": "chat",
+    "mode": "template",
+    "temperature": 0.0
+  },
+  "policy": {
+    "strategy": "local",
+    "max_rounds": 2,
+    "max_render_calls": 8,
+    "max_cost": 0.0,
+    "support_threshold": 0.8,
+    "contradict_threshold": 0.8,
+    "calibration_file": null
+  }
+}

@@ -1,0 +1,306 @@
+\section{Contract2Video}
+\label{sec:method}
+
+Contract2Video separates language-level planning from evidence about rendered
+media. Its three stages are contract compilation, specialist planning with
+abstaining arbitration, and rendering with dependency-aware repair. Planning
+agents propose what a video should contain. Observers assess what its pixels
+actually show. The latter assessment alone can justify output acceptance.
+Figure~\ref{fig:architecture} will illustrate this distinction.
+
+\subsection{Task and Acceptance Semantics}
+\label{sec:task}
+
+Given a request $x$, the system produces an ordered video
+$V=(v_1,\ldots,v_m)$ under a generation-call budget $B_N$ and a cost budget
+$B_C$. A requirement is a predicate $c_j$ whose scope
+$\Omega_j\subseteq\{1,\ldots,m\}$ identifies the relevant shots.
+The contract partitions requirements into hard constraints $\mathcal H$ and
+soft preferences $\mathcal S$. We distinguish the latent semantic condition
+\begin{equation}
+ H(V;\mathcal C)=\prod_{j\in\mathcal H}c_j(V_{\Omega_j})
+ \label{eq:true-acceptance}
+\end{equation}
+from its operational approximation $\widehat H(V;\mathcal C)$, computed by
+fallible observers. The input contract alone cannot satisfy
+Equation~\ref{eq:true-acceptance}. The arguments must include rendered media.
+Aesthetic quality is evaluated separately and does not override an unsupported
+hard requirement. The primary setting is silent multi-shot video. Audio
+relations remain representable but are inactive in the primary experiments.
+
+The intended optimization is to increase hard-constraint satisfaction and
+perceptual quality within fixed resource limits. We do not assume access to
+the true predicates during generation, nor claim to solve a globally optimal
+video-editing problem. Our controller implements a conservative, measurable
+decision procedure whose semantic accuracy must be established empirically.
+
+\subsection{Stage I: Contract Compilation}
+\label{sec:contract}
+
+Following the architecture, the semantic contract is
+\begin{equation}
+ \mathcal C=(E,A,O,R_T,R_S,R_A,\mathcal H,\mathcal S),
+\end{equation}
+where $E$ denotes persistent characters or other named entities, $A$ their
+attributes, $O$ scene objects, and $R_T$, $R_S$, and $R_A$ temporal, spatial,
+and audio relations. These components are serialized as stable entity
+identifiers and typed constraints. Objects and characters share the same
+identifier namespace. An object's role is expressed in its description and
+constraints. In particular, the JSON interface does not require an object
+detector to recognize every entity type before planning begins.
+
+The compiler also emits a shot plan
+$\mathcal P=(Q,D,\Sigma)$, with ordered shots
+$Q=(q_1,\ldots,q_m)$, a dependency DAG $D$, and planned boundary states
+$\Sigma$. Each shot specifies a prompt, duration, participating entities,
+and input/output states. An edge $i\!\rightarrow\!k$ means that rendering
+shot $k$ may depend on shot $i$ through a reference asset or a propagated
+state. Shot order is a topological order. Narrative events are represented
+through action constraints and state transitions attached to these shots.
+we do not equate a textual state with an observed event.
+
+Each serialized constraint stores its identifier, kind, natural-language
+description, shot scope, hardness, and positive evaluation weight. Supported
+kinds are entity, attribute, action, spatial, temporal, identity, text, and
+audio. A structural validator checks identifier uniqueness, reference
+resolution, nonempty scopes, positive finite durations and weights, and
+backward-only dependencies. These checks establish structural validity,
+not consistency with the user's intent. Compiler fidelity is therefore
+evaluated separately against human-annotated requirements.
+
+The contract is frozen before comparing repair policies for a given request.
+This controls for differences introduced by prompt decomposition. A separate
+end-to-end condition includes compiler errors. Neither repair nor arbitration
+may delete a hard constraint, lower its hardness, or replace it with an easier
+requirement merely to obtain acceptance.
+
+\subsection{Stage II: Specialist Planning and Arbitration}
+\label{sec:specialists}
+
+Three specialists cover complementary planning responsibilities. The story
+planner proposes event order and shot boundaries. The identity specialist
+tracks persistent descriptions, object ownership, and cross-shot references.
+The camera specialist proposes framing and motion while preserving the
+visibility needed to check requirements. An audio specialist is reserved for
+the audiovisual extension. Specialists receive the frozen contract and
+propose patches to the shot plan, rather than independently rewriting the
+user's requirements.
+
+Before rendering, an arbiter can reject a plan with a demonstrable symbolic
+conflict, such as a dependency cycle or incompatible declared object states.
+It can also request clarification of an uncheckable constraint. However,
+the absence of visual evidence before rendering is expected. It does not
+justify a visual violation verdict. Pre-render approval means only that a
+plan passes the available symbolic checks. Specialist disagreement after
+rendering is resolved by media evidence as described below, not by the
+number of agents repeating a claim. Multiple calls to one model are treated
+as potentially correlated observations.
+
+\subsection{Timestamped Evidence and Three-Way Decisions}
+\label{sec:evidence}
+
+For constraint $j$, an observer emits records
+\begin{equation}
+ e=(j,z,r,\Omega_e,T_e,h_e,u_e),
+\end{equation}
+where $z\in\{+, -, ?\}$ denotes support, contradiction, or abstention.
+The value $r\in[0,1]$ is an observation score. $\Omega_e$ lists the referenced
+shots, while $T_e$ contains within-shot time intervals. The hash $h_e$ binds
+those shots to their content hashes, and $u_e$ identifies the observation
+source. A rationale is
+stored for inspection but is not itself visual evidence. The score is not
+assumed to be a calibrated probability of truth.
+
+Every non-abstaining record must name an existing constraint, reference only
+shots in its scope, and provide a valid interval and matching content hash
+for every referenced asset. Invalid records become unknown. Hash validation
+prevents evidence for an older render from silently being assigned to a
+replacement. It does not prove that an observer's interpretation is correct.
+Likewise, valid timestamps establish localization metadata, not perception
+accuracy.
+
+Let $\mathcal E_j^+$ and $\mathcal E_j^-$ be valid support and contradiction
+records whose scores exceed their direction-specific thresholds. Let
+$b_j=\mathbf 1[\Omega_j\subseteq\bigcup_{e\in\mathcal E_j^+}\Omega_e]$
+indicate complete support coverage. The conservative aggregation rule is
+\begin{equation}
+ d_j =
+ \begin{cases}
+ \textsc{violated}, & \mathcal E_j^-\neq\varnothing,\\
+ \textsc{supported}, & \mathcal E_j^-=\varnothing,\ b_j=1,\\
+ \textsc{unknown}, & \text{otherwise}.
+ \end{cases}
+ \label{eq:arbitration}
+\end{equation}
+Thus an accepted contradiction takes precedence over support, and incomplete
+scope coverage cannot pass. For an identity or temporal relation, the
+observer must assess the relation jointly across its scope. Observing its
+individual endpoints is insufficient. Scope coverage is a necessary
+bookkeeping condition, not a substitute for that semantic check. Joint
+relation assessment is a required integration and evaluation criterion for
+the observer interface.
+
+Let $a(V)$ indicate that every required asset exists and is decodable.
+The operational acceptance condition is
+\begin{equation}
+ \widehat H(V;\mathcal C)
+ =a(V)
+  \prod_{j\in\mathcal H}\mathbf 1[d_j=\textsc{supported}].
+ \label{eq:operational-acceptance}
+\end{equation}
+An accepted output is therefore \emph{supported by the configured verifier},
+not guaranteed correct. Missing evidence yields abstention. It blocks
+acceptance of a hard constraint, but is reported separately from an observed
+violation. This distinction matters when visibility is poor or an observer
+cannot judge a subtle motion.
+
+\subsection{Threshold Selection and Certification}
+\label{sec:calibration}
+
+We select thresholds using a development split and assess them on a separate
+certification split with disjoint case identifiers. A calibration label
+indicates whether an observer's directional verdict is correct, rather than
+whether the video is globally satisfactory. For each predeclared stratum
+$g$ (support or contradiction in the primary setting), threshold $\tau_g$
+is selected to retain correct verdicts subject to a development false-positive
+constraint. It is frozen before certification.
+
+Let $n_g$ denote the number of incorrect candidate verdicts in the
+certification split, and let $k_g$ of these exceed $\tau_g$. The negative
+acceptance rate is estimated by $k_g/n_g$. For $K$ fixed strata, the
+implemented upper bound is
+\begin{equation}
+ U_g=\min\left\{1,\frac{k_g}{n_g}
+       +\sqrt{\frac{\log(K/\alpha)}{2n_g}}\right\}.
+ \label{eq:hoeffding}
+\end{equation}
+With independent certification examples within each stratum, fixed
+thresholds, and the same sampling distribution, Hoeffding's inequality and
+a union bound give simultaneous coverage at least $1-\alpha$. A stratum
+with no negative examples is uncertified. The strict policy abstains if
+required certification is unavailable or if any required bound exceeds its
+target $\epsilon$.
+
+This is a bound on $\Pr(r\geq\tau_g\mid\text{verdict incorrect})$.
+It is not a bound on the error fraction among accepted verdicts, the error
+probability of a complete video, or the risk after adaptive repair.
+Repeated observations from one case must not be counted as independent
+certification examples. In the proposed setting, one preselected
+candidate per case and direction is used for certification. Richer repeated
+observations remain available for descriptive analysis. Appendix
+Table~\ref{tab:calibration} recomputes the bound from the retained sample-size
+and error summaries. These entries do not certify a 5\% error target.
+Integer error counts, eligible negative-example counts, and case identifiers
+are required before any empirical certification claim.
+
+\subsection{Stage III: Dependency-Aware Local Repair}
+\label{sec:repair}
+
+After a render wave, all constraints are reassessed against the current
+assets. Let $\mathcal U_t$ be the hard constraints marked violated or unknown
+at round $t$. Their shot scopes define repair roots
+\begin{equation}
+ R_t=\bigcup_{j\in\mathcal U_t}\Omega_j.
+\end{equation}
+The repair set contains these roots and their transitive dependents:
+\begin{equation}
+ A_t=R_t\cup\operatorname{Desc}_{D}(R_t).
+ \label{eq:repair-closure}
+\end{equation}
+Shots in $A_t$ are regenerated in timeline order. All other assets are
+retained byte-for-byte. Descendant repair prevents a later shot from retaining
+an obsolete reference to a changed predecessor. Closure can equal the entire
+timeline, so the method does not promise a saving on every request.
+
+For observed violations, repair feedback identifies the constraint, affected
+span, and counterexample description. For unknown decisions, feedback instead
+states which evidence is unavailable. It must not invent a counterexample.
+A repair adapter may revise the shot prompt or regenerate a reference while
+preserving the frozen contract. Prompt changes and reference consumption are
+logged explicitly. Re-rendering with a new seed alone is a distinct baseline.
+The rule in Equation~\ref{eq:repair-closure} is a deterministic heuristic,
+not an exact minimum-cost edit operator and not a guarantee that the next
+attempt will succeed.
+
+Each attempted render, including a failed call, consumes the call budget.
+Before a request, the controller checks whether its conservative cost
+estimate fits the remaining budget. A monetary hard cap holds only if
+pre-call estimates upper-bound billed costs. Unknown provider charges cannot
+be bounded by bookkeeping alone. The system terminates when all hard
+constraints are supported, a budget or round limit prevents further work,
+or an execution error occurs. It records accepted, unresolved,
+budget-exhausted, and failed outcomes separately. A composed video may be
+retained for an unresolved run, with its status preserved.
+
+Table~\ref{tab:controller-pseudocode} makes the execution order explicit.
+The controller renders versioned assets, re-observes the current timeline after
+each wave, and computes the transitive dependency closure before repair. The
+contract remains fixed throughout this process.
+
+\begin{table}[t]
+\centering
+\tablefont
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.08}
+\begin{tabularx}{\columnwidth}{@{}>{\raggedleft\arraybackslash}p{4.0em}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\rowgreendeep
+\multicolumn{2}{@{}l@{}}{\textbf{Contract2Video controller}}\\
+\rowgreenlight
+\textbf{Input} & Request $x$, budgets $(B_N,B_C)$, thresholds $\tau$, renderer $\mathsf{G}$, and observer $\mathsf{O}$.\\
+\rowgreenlight
+\textbf{Output} & Video $V$, status $s$, and execution trace $T$.\\
+\midrule
+\rowgreenmid
+\multicolumn{2}{@{}l@{}}{\textbf{1. Compile and validate}}\\
+\rowgreenpale
+1 & $(\mathcal C,\mathcal P)\leftarrow\mathsf{Compile}(x)$ with $\mathcal P=(Q,D,\Sigma)$.\\
+\rowgreenpale
+2 & \textbf{if} $\neg\mathsf{Valid}(\mathcal C,\mathcal P)$ \textbf{return} $(\varnothing,\textsc{failed},T)$.\\
+\rowgreenpale
+3 & $W\leftarrow Q$ in topological order, $n\leftarrow0$, and $b\leftarrow0$. Initialize versioned assets and $T$.\\
+\midrule
+\rowgreenmid
+\multicolumn{2}{@{}l@{}}{\textbf{2. Render, observe, and decide}}\\
+\rowgreenpale
+4 & \textbf{while} $W\neq\varnothing$ and $\mathsf{BudgetOK}(n,b,B_N,B_C)$ \textbf{do}\\
+\rowgreenpale
+5 & \quad \textbf{for} $q\in W$ in topological order \textbf{do}\\
+\rowgreenpale
+6 & \qquad render $v_q\leftarrow\mathsf{G}(q,\mathcal C,\Sigma,T)$, increment $n,b$ before the call, and store its version and content hash.\\
+\rowgreenpale
+7 & \quad $\mathcal E\leftarrow\mathsf{O}(V_{\mathrm{current}})$. Invalidate records with an invalid scope, interval, or hash.\\
+\rowgreenpale
+8 & \quad $d_j\leftarrow\mathsf{Decide}(\mathcal E_j,\tau_j)$ for each $j\in\mathcal H$ using contradiction-first aggregation.\\
+\rowgreenpale
+9 & \quad \textbf{if} $a(V_{\mathrm{current}})=1$ and all $d_j=\textsc{supported}$ \textbf{return} $(V_{\mathrm{current}},\textsc{accepted},T)$.\\
+\rowgreenpale
+10 & \quad $U\leftarrow\{j\in\mathcal H:d_j\in\{\textsc{violated},\textsc{unknown}\}\}$.\\
+\rowgreenpale
+11 & \quad $R\leftarrow\bigcup_{j\in U}\Omega_j$ and $A\leftarrow R\cup\operatorname{Desc}_{D}(R)$.\\
+\rowgreenpale
+12 & \quad $F\leftarrow\mathsf{Explain}(U,\mathcal E)$. Revise prompts or references only for $A$, preserving $\mathcal C$.\\
+\rowgreenpale
+13 & \quad $W\leftarrow A$ in topological order and append the current-wave records to $T$.\\
+\rowgreenpale
+14 & \textbf{end while}\\
+\midrule
+\rowgreenlight
+15 & \textbf{if} $\neg\mathsf{BudgetOK}(n,b,B_N,B_C)$ \textbf{return} $(V_{\mathrm{current}},\textsc{budget\mbox{-}exhausted},T)$. Otherwise return $(V_{\mathrm{current}},\textsc{unresolved},T)$.\\
+\bottomrule
+\end{tabularx}
+\caption{Controller pseudocode for contract compilation, evidence-grounded acceptance, and dependency-aware repair. Every render attempt is charged before dispatch. Invalid evidence yields \textsc{unknown}, and repair preserves the frozen contract.}
+\label{tab:controller-pseudocode}
+\end{table}
+
+\paragraph{Implementation boundary.}
+The available controller implements schema validation, evidence validation
+and aggregation, threshold selection/certification, dependency closure,
+budgets, versioned assets, and trace export. The generic command adapter
+exposes feedback and reference arguments. The current direct Wan adapter
+performs prompt-based generation and does not yet consume those arguments.
+Its repeated calls correspond to resampling. Provider-backed visual
+observation, full specialist planning, and counterexample-conditioned
+rendering remain integration tasks for the proposed experiments. The paper
+does not treat deterministic examples or interface tests as evidence of
+video quality.

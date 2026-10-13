@@ -1,0 +1,256 @@
+\documentclass[11pt]{article}
+\usepackage[review]{acl}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{url}
+\newcommand{\method}{\textsc{Contract2Video}}
+\newcommand{\ours}{\method}
+\newcommand{\placeholder}[1]{\fbox{\parbox[c][0.22\textheight][c]{0.94\linewidth}{\centering\small #1}}}
+% Green gradient shared by all tables and the main-body algorithm table.
+\definecolor{alggreenpale}{RGB}{247,252,248}
+\definecolor{alggreenlight}{RGB}{235,247,238}
+\definecolor{alggreenmid}{RGB}{213,238,220}
+\definecolor{alggreendeep}{RGB}{177,216,186}
+\definecolor{greenline}{RGB}{63,91,69}
+\definecolor{firstplace}{RGB}{177,216,186}
+\definecolor{secondplace}{RGB}{213,238,220}
+\definecolor{thirdplace}{RGB}{235,247,238}
+\definecolor{papercolor}{RGB}{252,140,3}
+% Metric-aware cell fills: darker green denotes a better relative value.
+% Use metricbest/good/mid/low for higher-is-better or lower-is-better columns
+% after ranking the values in that column.
+\newcommand{\metricbest}[1]{\cellcolor{alggreendeep}{#1}}
+\newcommand{\metricgood}[1]{\cellcolor{alggreenmid}{#1}}
+\newcommand{\metricmid}[1]{\cellcolor{alggreenlight}{#1}}
+\newcommand{\metriclow}[1]{\cellcolor{alggreenpale}{#1}}
+\newcommand{\cellfirst}[1]{\metricbest{#1}}
+\newcommand{\cellsecond}[1]{\metricgood{#1}}
+\newcommand{\cellthird}[1]{\metricmid{#1}}
+\newcommand{\rowgreenpale}{\rowcolor{alggreenpale}}
+\newcommand{\rowgreenlight}{\rowcolor{alggreenlight}}
+\newcommand{\rowgreenmid}{\rowcolor{alggreenmid}}
+\newcommand{\rowgreendeep}{\rowcolor{alggreendeep}}
+\newcommand{\papernamecolor}{\textcolor{papercolor}{\textbf{\method}}}
+\setlength{\heavyrulewidth}{1.15pt}
+\setlength{\lightrulewidth}{0.5pt}
+\arrayrulecolor{greenline}
+% One physical font size for every table; never scale a finished table.
+\newcommand{\tablefont}{\fontsize{9}{11}\selectfont}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{Y}{>{\centering\arraybackslash}X}
+\newcolumntype{Z}{>{\raggedright\arraybackslash}X}
+\newcommand{\thead}[1]{\textbf{#1}}
+
+\title{Contract2Video: Evidence-Grounded Multi-Agent Planning and Dependency-Aware Repair for Multi-Shot Video Generation}
+\author{Anonymous ACL submission}
+\hypersetup{pdfauthor={},pdftitle={Contract2Video}}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Text-to-video systems can produce visually plausible clips while silently
+violating requirements about entities, actions, temporal order, camera
+visibility, and cross-shot identity. We present \method, a training-free agent
+workflow that compiles a natural-language request into a typed video
+production contract, dispatches story, identity, and camera specialists, and
+accepts rendered media only when timestamped evidence covers the hard
+constraints. A calibrated arbiter distinguishes contradiction from insufficient
+evidence, while a dependency-aware repair policy regenerates affected shots
+and their transitive dependents instead of rerendering an entire timeline. The
+method adapts the structured decomposition and veto principle of recent
+multi-agent video reasoning to generation, where the object being verified is
+the rendered video rather than a retrieval candidate. We define case-level
+metrics for hard-constraint satisfaction, abstention, regression, and cost per
+independently successful video. We specify an evaluation on eight A100 GPUs
+with open-weight renderers, cross-renderer transfer, and blinded human
+assessment. The appendix details API and compute accounting. Numerical
+summaries retained from an earlier draft remain unverified because case-level
+records and billing evidence are unavailable in the current artifact.
+They do not yet establish empirical gains, statistical significance, or
+successful threshold certification.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+High-quality video generation is often evaluated as if a plausible frame were
+sufficient evidence of success. In practical workflows, however, a request
+usually contains a set of requirements that must hold jointly: a named actor
+must persist across shots, an action must occur before a later state, an object
+must remain visible from a specified camera, and optional aesthetics must not
+silently replace hard instructions. A single prompt score or global video-text
+embedding does not expose which requirement failed, whether the evidence is
+missing, or which shots should be regenerated.
+
+Recent agentic video reasoning suggests decomposing a request into semantic
+roles, obtaining independent proposals, and using a veto mechanism to prune
+logically inconsistent candidates before expensive verification
+\citep{zhang-etal-2026-mavis}. We argue that generation requires a different contract:
+the planner predicts an intended production plan, but only the pixels and audio
+of the rendered asset can provide evidence about the final claim. This creates
+a planning--execution gap. Treating a textual plan as proof risks accepting
+videos that merely describe a desired event. Treating every failure as global
+requires unnecessary rerendering and makes multi-shot production expensive.
+
+We introduce \method, a controller that makes this gap explicit. It (i) emits
+a typed contract with entities, attributes, objects, relations, hard
+constraints, and soft preferences, (ii) assigns relevant roles to specialist
+agents and rejects symbolic conflicts before rendering, (iii) stores
+constraint-indexed evidence with timestamps, asset hashes, and source
+identifiers, (iv) uses conservative, direction-specific thresholds with an
+abstaining decision, and (v) regenerates the dependency closure of violated or
+unobservable constraints. The controller never treats lack of evidence as
+proof of violation and never weakens a hard constraint to obtain acceptance.
+
+The paper makes four contributions:
+\begin{itemize}[leftmargin=*,itemsep=1pt,topsep=2pt]
+\item a typed video production contract that separates semantic intent,
+shot dependencies, and observability requirements.
+\item an evidence-grounded arbitration rule with contradiction priority,
+scope coverage, asset-version binding, and abstention.
+\item a dependency-aware local repair policy with explicit resource budgets
+and formally stated implementation properties.
+\item an anonymous evaluation design that separates controller
+quality from renderer quality and reports cost per accepted case.
+\end{itemize}
+
+\begin{figure*}[t]
+\centering
+\fbox{\parbox[c][0.20\textheight][c]{0.95\linewidth}{\centering
+\textbf{Architecture figure placeholder}\\[8pt]
+Stage I: typed contract compilation\\[5pt]
+Stage II: story, identity, and camera planning with symbolic checks\\[5pt]
+Stage III: rendering, grounded observation, abstaining verification, and local repair\\[8pt]
+Replace with the final vector illustration based on the supplied architecture.}}
+\caption{The planned three-stage workflow. Symbolic plan approval precedes
+rendering. Output acceptance requires timestamped evidence from the current
+assets. Failed or unobservable constraints trigger repair of their shot
+dependency closure. Audio is an optional extension.}
+\label{fig:architecture}
+\end{figure*}
+
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Agentic decomposition and verification.}
+ReAct interleaves reasoning and tool use \citep{yao2023react}, while
+Self-Refine and Reflexion use iterative feedback to improve outputs
+\citep{madaan2023selfrefine,shinn2023reflexion}. Multi-agent frameworks such as
+AutoGen and MetaGPT organize role-specific collaboration
+\citep{wu2024autogen,hong2024metagpt}. MAVIS applies structured scene, object,
+and action agents with a logic-aware veto mechanism to video retrieval
+\citep{zhang-etal-2026-mavis}. Our setting differs in that the controller must cause
+new media to be rendered and must bind every post-render decision to a specific
+asset version and time span.
+
+\paragraph{Agent workflows for video production.}
+VideoDirectorGPT and VideoStudio plan consistent multi-scene generation
+\citep{lin2024videodirectorgpt,long2024videostudio}. VideoGen-of-Thought and
+MovieAgent structure multi-shot or movie production
+\citep{zheng2025videogenofthought,wu2025movieagent}. VideoAgent refines generated
+video plans using external feedback in robotic tasks \citep{soni2025videoagent}.
+These works motivate planning and refinement as strong comparisons. Our
+testable distinction is a constraint-indexed decision rule that records
+unknown evidence, binds observations to asset versions, and repairs a
+dependency closure under matched budgets. We do not claim that agent roles
+or iterative feedback alone are novel.
+
+\paragraph{Video generation and evaluation.}
+Open video generators such as Wan and HunyuanVideo provide practical backbones
+for controlled evaluation \citep{wan2025wan,kong2025hunyuanvideo}. Existing benchmarks
+measure text-video alignment, compositionality, motion, and perceptual quality
+through suites such as VBench, T2V-CompBench, VideoScore, and EvalCrafter
+\citep{huang2023vbench,sun2025t2vcompbench,he2024videoscore,liu2024evalcrafter}.
+These metrics are useful diagnostics but do not replace case-level checking of
+requirements such as ``the same character enters in shot three'' or ``event A
+precedes event B.'' Our primary metrics therefore evaluate executable contract
+constraints and use generic benchmarks only as secondary analysis.
+
+\paragraph{Selective decisions and reliability.}
+Selective prediction separates abstention from an unconditional label
+\citep{geifman2017selective}. Conformal and concentration-based methods provide
+finite-sample tools under explicit exchangeability assumptions
+\citep{angelopoulos2023conformal,hoeffding1963probability}. Confidence values
+from a language or vision-language model are not automatically calibrated
+probabilities. We therefore freeze thresholds on a development split, audit
+them on disjoint case-level certification examples, and report unknown and
+false-acceptance rates separately. Multiple paired comparisons are corrected
+with Holm's procedure \citep{holm1979simple}.
+
+\input{method.tex}
+
+% Experimental design and primary result tables.
+\input{experiments.tex}
+
+\section{Discussion}
+\label{sec:discussion}
+
+The central empirical question is not whether a larger renderer can make a
+more attractive clip. It is whether explicit contracts and evidence change the
+rate at which a fixed renderer satisfies language-level requirements. The
+shared-contract condition addresses this question. The end-to-end
+condition measures the complete user-facing pipeline. Reporting both is
+important because a contract compiler can fail before any pixel is generated.
+
+The distinction between violation and unknown is also operationally important.
+An object outside the field of view may be absent from the evidence without
+being absent from the intended scene. A conservative controller should either
+improve visibility or abstain, rather than convert uncertainty into a confident
+negative. Likewise, a repair that changes one predecessor may invalidate a
+later identity relation, which motivates the transitive closure rather than a
+single-shot patch.
+
+The retained summary lists HCS values of 71.8\% for global repair and
+78.6\% for Contract2Video, with complete-case success of 43.3\% and 54.0\%.
+These entries require case-level reconciliation before they can support a
+comparison. In particular, the challenge-stratum means and human-preference
+columns do not yet match their stated aggregation rules. The displayed
+differences are hypotheses for replication, not established empirical gains.
+
+\section*{Limitations}
+\label{sec:limitations}
+
+The method depends on the semantic accuracy and coverage of its observer. A
+well-formed evidence record can still reflect a mistaken visual judgment. The
+proposed concentration bound applies only to fixed thresholds and independent
+case-level certification examples, not to adaptive repair trajectories or the
+complete-video false discovery rate. Local repair can over- or under-approximate
+true causal dependencies, and it can equal global rerendering when many shots
+share a predecessor. The primary suite is silent and short-form. Audio,
+long-horizon character identity, and native sound generation are separate
+extensions. Finally, the current research repository contains tested schema,
+evidence, budget, and repair interfaces, while provider-backed VLM observation,
+full specialist orchestration, and reference-conditioned Wan repair remain
+integration work and cannot be presented as completed results.
+
+\section*{Ethical Considerations}
+\label{sec:ethics}
+
+A production workflow can make synthetic media easier to generate and may be
+used for impersonation, deceptive editing, or unauthorized depiction. The
+experiments should use licensed or synthetic prompts and reference assets,
+retain provider safety filters, and disclose watermarks and generation
+provenance. Human evaluation should avoid sensitive personal data and report
+rater compensation and consent. The system's abstention behavior is intended
+to surface uncertainty, not to certify that an output is safe or truthful in
+all downstream contexts.
+
+\bibliography{references}
+\appendix
+\input{method_appendix.tex}
+\input{experiments_appendix.tex}
+
+\end{document}
