@@ -2,22 +2,6 @@
 
 **Contract2Video** is an anonymous research implementation for evidence-grounded, multi-agent video planning and local repair. It compiles a natural-language request into a structured video-production contract, renders individual shots through a replaceable renderer, observes the rendered assets, and repairs only the shots implicated by unresolved constraints.
 
-The repository is designed for reproducible research and review. It contains interface definitions, a reference procedural renderer, a fixture-only scripted observer, planning and verification utilities, evaluation helpers, configuration examples, and documentation. It does not include model weights, benchmark media, external API credentials, or private data. The accompanying paper records a supplied fixed-profile export; this repository itself does not claim independent multi-seed replication.
-
-## Recommended submission track
-
-- **Primary:** LLM Agents for NLP
-- **Secondary:** Multimodality and Language Grounding
-
-The primary framing treats video production as language-grounded planning, constraint verification, and tool-use control. The secondary framing emphasizes grounding language contracts in temporal, spatial, identity, audio, and text evidence from generated media.
-
-## Research question
-
-Can a language model compile a video request into a verifiable production contract and, after observing generated shots, repair only the shots that violate that contract? The system makes this question explicit by separating planning, rendering, observation, and control behind typed interfaces.
-
-## Reader-friendly introduction
-
-A Chinese easy-to-read explanation of the workflow is provided in `docs/easy_intro/`. It includes Markdown, HTML, a Word document, and the architecture reference image. The explanation distinguishes runnable control logic from external model evaluation and labels retained paper summaries as pending verification.
 
 ## Repository layout
 
@@ -104,7 +88,7 @@ The adapter must write the requested clip to `target`, return its measured durat
 
 For a real observer, implement `Observer.observe(contract, assets)` and emit timestamped `Evidence` records. An observer should use independent video, audio, OCR, or tracking signals and declare its source in each record. The included scripted observer is explicitly fixture-only.
 
-## Evaluation protocol
+## Evaluation
 
 Evaluation consumes independent per-case manifests rather than frame-level rows. Aggregate by prompt or case, report paired bootstrap confidence intervals and fixed-seed randomization tests, and keep human-evaluation pairing keys separate from anonymized labels. Export clip manifests for external video benchmarks instead of fabricating perceptual scores. The paper's supplied fixed-profile values are kept in the submission source under `paper/latex/`; no raw benchmark media or weights are bundled in this repository.
 
@@ -114,6 +98,3 @@ See:
 - [`docs/REPRODUCIBILITY.md`](docs/REPRODUCIBILITY.md) for environment, data, renderer, and reporting requirements.
 - [`docs/RESPONSIBLE_NLP.md`](docs/RESPONSIBLE_NLP.md) for limitations and responsible use.
 
-## Citation and release status
-
-This is an anonymous submission artifact. Do not add author names, institutions, private repository links, private workspace paths, credentials, or identifying acknowledgements before the review version is finalized. The release is intended to make the method and interfaces inspectable. The paper clearly labels its supplied fixed-profile values and does not present them as independent training-seed uncertainty.
