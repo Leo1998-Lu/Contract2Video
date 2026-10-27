@@ -1,5 +1,0 @@
-artifact_version: v08
-artifact_date: 2026-10-10
-basis: v07 audit-clean revision
-pdf: Contract2Video_ACL_ARR_v08_metric_gradient_20261010.pdf
-changes: metric-aware within-column green gradients, neutral record-only fields, unified 9pt table body, preserved numerical audit disclosures
